@@ -1,15 +1,13 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-// GAME STATE
 let scene, camera, renderer, controls;
-let gameMode = 'story'; // 'story' or 'endless'
+let gameMode = 'story';
 let currentLevel = 1;
 let credits = Number(localStorage.getItem('fps_credits')) || 100;
 let inventory = JSON.parse(localStorage.getItem('fps_inventory')) || { rifle: false, sniper: false, speed: false, shield: false };
 let currentWeapon = 'pistol';
 
-// PLAYER STATS & PHYSICS
 let health = 100;
 let maxHealth = 100;
 let stamina = 100;
@@ -24,18 +22,15 @@ const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let prevTime = performance.now();
 
-// WORLD OBJECTS
 let platforms = [];
 let enemies = [];
 let raycaster = new THREE.Raycaster();
 
-// INITIALIZATION
 window.addEventListener('DOMContentLoaded', () => {
     updateUI();
     initEngine();
 });
 
-// GLOBAL UI ROUTER
 window.showHomeMenu = () => {
     document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
     document.getElementById('home-menu').classList.remove('hidden');
@@ -68,7 +63,6 @@ function updateUI() {
     document.getElementById('shop-credits').innerText = credits;
     document.getElementById('hud-credits').innerText = credits;
     
-    // Update shop buttons
     if (inventory.rifle) document.getElementById('buy-rifle').innerText = 'Owned';
     if (inventory.sniper) document.getElementById('buy-sniper').innerText = 'Owned';
     if (inventory.speed) document.getElementById('buy-speed').innerText = 'Owned';
@@ -92,14 +86,13 @@ window.startMode = (mode) => {
     loadLevel(currentLevel);
 };
 
-// THREE.JS ENGINE SETUP
 function initEngine() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a12);
     scene.fog = new THREE.FogExp2(0x0a0a12, 0.03);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.y = 1.6;
+    camera.position.set(0, 2, 0);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -114,7 +107,6 @@ function initEngine() {
 
     scene.add(controls.getObject());
 
-    // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
@@ -123,7 +115,6 @@ function initEngine() {
     dirLight.castShadow = true;
     scene.add(dirLight);
 
-    // Event Listeners
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('mousedown', onMouseDown);
@@ -133,13 +124,15 @@ function initEngine() {
     animate();
 }
 
-// LEVEL GENERATION
 function loadLevel(lvl) {
-    // Clear old elements
     platforms.forEach(p => scene.remove(p));
     enemies.forEach(e => scene.remove(e.mesh));
     platforms = [];
     enemies = [];
+
+    // Reset player position safely above ground
+    controls.getObject().position.set(0, 3, 0);
+    velocity.set(0, 0, 0);
 
     // Base Floor
     const floorGeo = new THREE.BoxGeometry(100, 2, 100);
@@ -150,7 +143,7 @@ function loadLevel(lvl) {
     scene.add(floor);
     platforms.push(floor);
 
-    // Generate Interactive Platforms / Obstacles
+    // Interactive Platforms / Obstacles
     const platformCount = 10 + lvl * 2;
     for (let i = 0; i < platformCount; i++) {
         const w = Math.random() * 6 + 4;
@@ -171,7 +164,7 @@ function loadLevel(lvl) {
         platforms.push(plat);
     }
 
-    // Spawn Humanoid Enemies
+    // Spawn Enemies
     const enemyCount = gameMode === 'story' ? 4 + lvl * 3 : 8 + lvl * 5;
     for (let i = 0; i < enemyCount; i++) {
         spawnEnemy();
@@ -182,25 +175,19 @@ function loadLevel(lvl) {
     updateEnemyHUD();
 }
 
-// HUMANOID ENEMY CREATION
 function spawnEnemy() {
     const group = new THREE.Group();
-
-    // Materials
     const armorMat = new THREE.MeshStandardMaterial({ color: 0xcc1133, roughness: 0.3 });
     const jointMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
-    // Torso
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), armorMat);
     torso.position.y = 1.2;
     group.add(torso);
 
-    // Head
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), armorMat);
     head.position.y = 2.0;
     group.add(head);
 
-    // Visor (Glow)
     const visor = new THREE.Mesh(
         new THREE.BoxGeometry(0.3, 0.1, 0.2),
         new THREE.MeshBasicMaterial({ color: 0x00ffff })
@@ -208,7 +195,6 @@ function spawnEnemy() {
     visor.position.set(0, 2.0, 0.2);
     group.add(visor);
 
-    // Arms & Legs
     const legGeo = new THREE.CylinderGeometry(0.12, 0.1, 1.0);
     const leftLeg = new THREE.Mesh(legGeo, jointMat);
     leftLeg.position.set(-0.25, 0.5, 0);
@@ -230,7 +216,6 @@ function updateEnemyHUD() {
     document.getElementById('hud-enemies').innerText = enemies.length;
 }
 
-// CONTROLS & PHYSICS
 function onKeyDown(e) {
     switch (e.code) {
         case 'KeyW': moveForward = true; break;
@@ -244,9 +229,9 @@ function onKeyDown(e) {
         case 'ShiftLeft':
             if (!isSliding && stamina > 30) {
                 isSliding = true;
-                slideTimer = 0.5; // Slide duration
+                slideTimer = 0.5;
                 stamina -= 30;
-                camera.position.y = 0.8; // Lower camera height
+                camera.position.y = 0.8;
             }
             break;
     }
@@ -263,10 +248,9 @@ function onKeyUp(e) {
 
 function onMouseDown(e) {
     if (!controls.isLocked) return;
-
-    if (e.button === 0) { // Left Click: Shoot
+    if (e.button === 0) {
         shoot();
-    } else if (e.button === 2) { // Right Click: Scope
+    } else if (e.button === 2) {
         isScoped = true;
         camera.fov = currentWeapon === 'sniper' ? 20 : 45;
         camera.updateProjectionMatrix();
@@ -276,7 +260,7 @@ function onMouseDown(e) {
 }
 
 function onMouseUp(e) {
-    if (e.button === 2) { // Release Scope
+    if (e.button === 2) {
         isScoped = false;
         camera.fov = 75;
         camera.updateProjectionMatrix();
@@ -309,7 +293,6 @@ function shoot() {
                 updateUI();
                 updateEnemyHUD();
 
-                // Check Level Complete
                 if (enemies.length === 0) {
                     currentLevel++;
                     if (gameMode === 'story' && currentLevel > 3) {
@@ -331,7 +314,6 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// MAIN GAME LOOP
 function animate() {
     requestAnimationFrame(animate);
 
@@ -339,16 +321,13 @@ function animate() {
     const delta = (time - prevTime) / 1000;
 
     if (controls.isLocked) {
-        // Stamina Recovery
         if (stamina < 100) stamina = Math.min(100, stamina + 20 * delta);
         document.getElementById('stamina-fill').style.width = stamina + '%';
 
-        // Friction & Gravity
         velocity.x -= velocity.x * 10.0 * delta;
         velocity.z -= velocity.z * 10.0 * delta;
-        velocity.y -= 30.0 * delta; // Gravity
+        velocity.y -= 30.0 * delta;
 
-        // Directions
         direction.z = Number(moveForward) - Number(moveBackward);
         direction.x = Number(moveRight) - Number(moveLeft);
         direction.normalize();
@@ -357,42 +336,48 @@ function animate() {
         if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta * speedMult;
         if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta * speedMult;
 
-        // Slide Mechanics
         if (isSliding) {
             slideTimer -= delta;
             if (slideTimer <= 0) {
                 isSliding = false;
-                camera.position.y = 1.6; // Reset height
+                camera.position.y = 1.6;
             }
         }
 
-        // Apply Movement
         controls.moveRight(-velocity.x * delta);
         controls.moveForward(-velocity.z * delta);
         controls.getObject().position.y += velocity.y * delta;
 
-        // Platform Collisions (Raycast Downwards)
+        // HARD FLOOR BOUNDARY: Prevent falling through the void entirely
+        if (controls.getObject().position.y < 1.6) {
+            controls.getObject().position.y = 1.6;
+            velocity.y = 0;
+            canJump = true;
+        }
+
+        // Platform Collisions
         const playerRay = new THREE.Raycaster(
             controls.getObject().position,
             new THREE.Vector3(0, -1, 0),
             0,
-            1.7
+            1.8
         );
         const platformHits = playerRay.intersectObjects(platforms);
 
         if (platformHits.length > 0) {
-            velocity.y = Math.max(0, velocity.y);
-            controls.getObject().position.y = platformHits[0].point.y + 1.6;
-            canJump = true;
+            const targetY = platformHits[0].point.y + 1.6;
+            if (controls.getObject().position.y <= targetY + 0.5) {
+                controls.getObject().position.y = targetY;
+                velocity.y = Math.max(0, velocity.y);
+                canJump = true;
+            }
         }
 
-        // Update Enemies Logic (Chasing)
         const playerPos = controls.getObject().position;
         enemies.forEach(e => {
             e.mesh.lookAt(playerPos.x, e.mesh.position.y, playerPos.z);
             e.mesh.translateZ(2.5 * delta * (1 + currentLevel * 0.1));
 
-            // Check Damage to Player
             if (e.mesh.position.distanceTo(playerPos) < 1.5) {
                 health -= 15 * delta;
                 document.getElementById('health-fill').style.width = Math.max(0, (health / maxHealth) * 100) + '%';
