@@ -1,97 +1,326 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-let camera, scene, renderer, controls;
+// GAME STATE
+let scene, camera, renderer, controls;
+let gameMode = 'story'; // 'story' or 'endless'
+let currentLevel = 1;
+let credits = Number(localStorage.getItem('fps_credits')) || 100;
+let inventory = JSON.parse(localStorage.getItem('fps_inventory')) || { rifle: false, sniper: false, speed: false, shield: false };
+let currentWeapon = 'pistol';
+
+// PLAYER STATS & PHYSICS
+let health = 100;
+let maxHealth = 100;
+let stamina = 100;
+let isDead = false;
+let isScoped = false;
+let isSliding = false;
+let slideTimer = 0;
+
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-let prevTime = performance.now();
+let canJump = false;
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
+let prevTime = performance.now();
 
-init();
-animate();
+// WORLD OBJECTS
+let platforms = [];
+let enemies = [];
+let raycaster = new THREE.Raycaster();
 
-function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color( 0x101010 );
-    scene.fog = new THREE.FogExp2( 0x101010, 0.05 );
+// INITIALIZATION
+window.addEventListener('DOMContentLoaded', () => {
+    updateUI();
+    initEngine();
+});
 
-    camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
-    camera.position.y = 1.6; // Player height
+// GLOBAL UI ROUTER
+window.showHomeMenu = () => {
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    document.getElementById('home-menu').classList.remove('hidden');
+    updateUI();
+};
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    document.body.appendChild( renderer.domElement );
+window.showStoryMenu = () => {
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    document.getElementById('story-menu').classList.remove('hidden');
+};
 
-    controls = new PointerLockControls( camera, document.body );
+window.openShop = () => {
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    document.getElementById('shop-menu').classList.remove('hidden');
+    updateUI();
+};
 
-    const instructions = document.getElementById( 'instructions' );
-    instructions.addEventListener( 'click', () => {
-        controls.lock();
-    });
-
-    controls.addEventListener( 'lock', () => {
-        instructions.style.display = 'none';
-    });
-
-    controls.addEventListener( 'unlock', () => {
-        instructions.style.display = '';
-    });
-
-    scene.add( controls.getObject() );
-
-    // Lighting
-    const light = new THREE.HemisphereLight( 0xeeeeff, 0x777788, 2.5 );
-    light.position.set( 0.5, 1, 0.75 );
-    scene.add( light );
-
-    // Floor
-    const floorGeometry = new THREE.PlaneGeometry( 200, 200, 50, 50 );
-    floorGeometry.rotateX( - Math.PI / 2 );
-    const floorMaterial = new THREE.MeshBasicMaterial( { color: 0x444444, wireframe: true } );
-    const floor = new THREE.Mesh( floorGeometry, floorMaterial );
-    scene.add( floor );
-
-    // Add some target boxes to shoot at
-    const boxGeometry = new THREE.BoxGeometry( 2, 2, 2 );
-    for ( let i = 0; i < 20; i++ ) {
-        const boxMaterial = new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff } );
-        const box = new THREE.Mesh( boxGeometry, boxMaterial );
-        box.position.x = ( Math.random() - 0.5 ) * 80;
-        box.position.y = 1;
-        box.position.z = ( Math.random() - 0.5 ) * 80;
-        scene.add( box );
+window.buyItem = (item, cost) => {
+    if (credits >= cost && !inventory[item]) {
+        credits -= cost;
+        inventory[item] = true;
+        localStorage.setItem('fps_credits', credits);
+        localStorage.setItem('fps_inventory', JSON.stringify(inventory));
+        updateUI();
     }
+};
 
-    // Keyboard Listeners
-    window.addEventListener( 'keydown', (e) => handleKeys(e, true) );
-    window.addEventListener( 'keyup', (e) => handleKeys(e, false) );
-    window.addEventListener( 'click', shoot );
-    window.addEventListener( 'resize', onWindowResize );
+function updateUI() {
+    document.getElementById('credits-display').innerText = credits;
+    document.getElementById('shop-credits').innerText = credits;
+    document.getElementById('hud-credits').innerText = credits;
+    
+    // Update shop buttons
+    if (inventory.rifle) document.getElementById('buy-rifle').innerText = 'Owned';
+    if (inventory.sniper) document.getElementById('buy-sniper').innerText = 'Owned';
+    if (inventory.speed) document.getElementById('buy-speed').innerText = 'Owned';
+    if (inventory.shield) document.getElementById('buy-shield').innerText = 'Owned';
 }
 
-function handleKeys(event, isDown) {
-    switch ( event.code ) {
-        case 'KeyW': moveForward = isDown; break;
-        case 'KeyS': moveBackward = isDown; break;
-        case 'KeyA': moveLeft = isDown; break;
-        case 'KeyD': moveRight = isDown; break;
+window.startMode = (mode) => {
+    gameMode = mode;
+    currentLevel = 1;
+    maxHealth = inventory.shield ? 150 : 100;
+    health = maxHealth;
+    
+    if (inventory.sniper) currentWeapon = 'sniper';
+    else if (inventory.rifle) currentWeapon = 'rifle';
+    else currentWeapon = 'pistol';
+
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    document.getElementById('hud').classList.remove('hidden');
+
+    controls.lock();
+    loadLevel(currentLevel);
+};
+
+// THREE.JS ENGINE SETUP
+function initEngine() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a12);
+    scene.fog = new THREE.FogExp2(0x0a0a12, 0.03);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.y = 1.6;
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    controls = new PointerLockControls(camera, document.body);
+
+    controls.addEventListener('unlock', () => {
+        if (!isDead) window.showHomeMenu();
+    });
+
+    scene.add(controls.getObject());
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.5);
+    dirLight.position.set(20, 40, 20);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // Event Listeners
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('resize', onWindowResize);
+
+    animate();
+}
+
+// LEVEL GENERATION
+function loadLevel(lvl) {
+    // Clear old elements
+    platforms.forEach(p => scene.remove(p));
+    enemies.forEach(e => scene.remove(e.mesh));
+    platforms = [];
+    enemies = [];
+
+    // Base Floor
+    const floorGeo = new THREE.BoxGeometry(100, 2, 100);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.position.set(0, -1, 0);
+    floor.receiveShadow = true;
+    scene.add(floor);
+    platforms.push(floor);
+
+    // Generate Interactive Platforms / Obstacles
+    const platformCount = 10 + lvl * 2;
+    for (let i = 0; i < platformCount; i++) {
+        const w = Math.random() * 6 + 4;
+        const h = Math.random() * 4 + 2;
+        const d = Math.random() * 6 + 4;
+        const plat = new THREE.Mesh(
+            new THREE.BoxGeometry(w, h, d),
+            new THREE.MeshStandardMaterial({ color: 0x2a2a3a, roughness: 0.5 })
+        );
+        plat.position.set(
+            (Math.random() - 0.5) * 70,
+            h / 2,
+            (Math.random() - 0.5) * 70
+        );
+        plat.castShadow = true;
+        plat.receiveShadow = true;
+        scene.add(plat);
+        platforms.push(plat);
+    }
+
+    // Spawn Humanoid Enemies
+    const enemyCount = gameMode === 'story' ? 4 + lvl * 3 : 8 + lvl * 5;
+    for (let i = 0; i < enemyCount; i++) {
+        spawnEnemy();
+    }
+
+    document.getElementById('hud-mode').innerText = gameMode.toUpperCase();
+    document.getElementById('hud-level').innerText = currentLevel;
+    updateEnemyHUD();
+}
+
+// HUMANOID ENEMY CREATION
+function spawnEnemy() {
+    const group = new THREE.Group();
+
+    // Materials
+    const armorMat = new THREE.MeshStandardMaterial({ color: 0xcc1133, roughness: 0.3 });
+    const jointMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+    // Torso
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), armorMat);
+    torso.position.y = 1.2;
+    group.add(torso);
+
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), armorMat);
+    head.position.y = 2.0;
+    group.add(head);
+
+    // Visor (Glow)
+    const visor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.1, 0.2),
+        new THREE.MeshBasicMaterial({ color: 0x00ffff })
+    );
+    visor.position.set(0, 2.0, 0.2);
+    group.add(visor);
+
+    // Arms & Legs
+    const legGeo = new THREE.CylinderGeometry(0.12, 0.1, 1.0);
+    const leftLeg = new THREE.Mesh(legGeo, jointMat);
+    leftLeg.position.set(-0.25, 0.5, 0);
+    const rightLeg = new THREE.Mesh(legGeo, jointMat);
+    rightLeg.position.set(0.25, 0.5, 0);
+    group.add(leftLeg, rightLeg);
+
+    group.position.set(
+        (Math.random() - 0.5) * 80,
+        0,
+        (Math.random() - 0.5) * 80
+    );
+
+    scene.add(group);
+    enemies.push({ mesh: group, health: 60 + currentLevel * 10 });
+}
+
+function updateEnemyHUD() {
+    document.getElementById('hud-enemies').innerText = enemies.length;
+}
+
+// CONTROLS & PHYSICS
+function onKeyDown(e) {
+    switch (e.code) {
+        case 'KeyW': moveForward = true; break;
+        case 'KeyS': moveBackward = true; break;
+        case 'KeyA': moveLeft = true; break;
+        case 'KeyD': moveRight = true; break;
+        case 'Space': 
+            if (canJump) { velocity.y += 12; canJump = false; }
+            break;
+        case 'KeyC':
+        case 'ShiftLeft':
+            if (!isSliding && stamina > 30) {
+                isSliding = true;
+                slideTimer = 0.5; // Slide duration
+                stamina -= 30;
+                camera.position.y = 0.8; // Lower camera height
+            }
+            break;
+    }
+}
+
+function onKeyUp(e) {
+    switch (e.code) {
+        case 'KeyW': moveForward = false; break;
+        case 'KeyS': moveBackward = false; break;
+        case 'KeyA': moveLeft = false; break;
+        case 'KeyD': moveRight = false; break;
+    }
+}
+
+function onMouseDown(e) {
+    if (!controls.isLocked) return;
+
+    if (e.button === 0) { // Left Click: Shoot
+        shoot();
+    } else if (e.button === 2) { // Right Click: Scope
+        isScoped = true;
+        camera.fov = currentWeapon === 'sniper' ? 20 : 45;
+        camera.updateProjectionMatrix();
+        document.getElementById('crosshair').classList.add('scoped');
+        document.getElementById('scope-overlay').style.display = 'block';
+    }
+}
+
+function onMouseUp(e) {
+    if (e.button === 2) { // Release Scope
+        isScoped = false;
+        camera.fov = 75;
+        camera.updateProjectionMatrix();
+        document.getElementById('crosshair').classList.remove('scoped');
+        document.getElementById('scope-overlay').style.display = 'none';
     }
 }
 
 function shoot() {
-    if ( !controls.isLocked ) return;
-    
-    // Simple Raycaster for shooting
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2( 0, 0 ); // Center of screen
-    raycaster.setFromCamera( pointer, camera );
-    
-    const intersects = raycaster.intersectObjects( scene.children );
-    if ( intersects.length > 0 ) {
-        const hitObject = intersects[ 0 ].object;
-        if ( hitObject.geometry.type === 'BoxGeometry' ) {
-            // Change color or remove target when hit
-            hitObject.material.color.set( 0xff0000 );
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const enemyMeshes = enemies.map(e => e.mesh);
+    const intersects = raycaster.intersectObjects(enemyMeshes, true);
+
+    if (intersects.length > 0) {
+        let hitGroup = intersects[0].object;
+        while (hitGroup.parent && hitGroup.parent.type === 'Group') {
+            hitGroup = hitGroup.parent;
+        }
+
+        const enemyObj = enemies.find(e => e.mesh === hitGroup);
+        if (enemyObj) {
+            const dmg = currentWeapon === 'sniper' ? 100 : (currentWeapon === 'rifle' ? 40 : 25);
+            enemyObj.health -= dmg;
+
+            if (enemyObj.health <= 0) {
+                scene.remove(enemyObj.mesh);
+                enemies = enemies.filter(e => e !== enemyObj);
+                credits += 25;
+                localStorage.setItem('fps_credits', credits);
+                updateUI();
+                updateEnemyHUD();
+
+                // Check Level Complete
+                if (enemies.length === 0) {
+                    currentLevel++;
+                    if (gameMode === 'story' && currentLevel > 3) {
+                        alert('STORY COMPLETED: Outpost Purged Successfully!');
+                        controls.unlock();
+                    } else {
+                        alert(`Level ${currentLevel - 1} Cleared! Starting Level ${currentLevel}`);
+                        loadLevel(currentLevel);
+                    }
+                }
+            }
         }
     }
 }
@@ -99,30 +328,84 @@ function shoot() {
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// MAIN GAME LOOP
 function animate() {
-    requestAnimationFrame( animate );
+    requestAnimationFrame(animate);
 
     const time = performance.now();
-    if ( controls.isLocked ) {
-        const delta = ( time - prevTime ) / 1000;
+    const delta = (time - prevTime) / 1000;
 
+    if (controls.isLocked) {
+        // Stamina Recovery
+        if (stamina < 100) stamina = Math.min(100, stamina + 20 * delta);
+        document.getElementById('stamina-fill').style.width = stamina + '%';
+
+        // Friction & Gravity
         velocity.x -= velocity.x * 10.0 * delta;
         velocity.z -= velocity.z * 10.0 * delta;
+        velocity.y -= 30.0 * delta; // Gravity
 
-        direction.z = Number( moveForward ) - Number( moveBackward );
-        direction.x = Number( moveRight ) - Number( moveLeft );
+        // Directions
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveRight) - Number(moveLeft);
         direction.normalize();
 
-        if ( moveForward || moveBackward ) velocity.z -= direction.z * 400.0 * delta;
-        if ( moveLeft || moveRight ) velocity.x -= direction.x * 400.0 * delta;
+        const speedMult = (inventory.speed ? 1.3 : 1.0) * (isSliding ? 2.0 : 1.0);
+        if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta * speedMult;
+        if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta * speedMult;
 
-        controls.moveRight( - velocity.x * delta );
-        controls.moveForward( - velocity.z * delta );
+        // Slide Mechanics
+        if (isSliding) {
+            slideTimer -= delta;
+            if (slideTimer <= 0) {
+                isSliding = false;
+                camera.position.y = 1.6; // Reset height
+            }
+        }
+
+        // Apply Movement
+        controls.moveRight(-velocity.x * delta);
+        controls.moveForward(-velocity.z * delta);
+        controls.getObject().position.y += velocity.y * delta;
+
+        // Platform Collisions (Raycast Downwards)
+        const playerRay = new THREE.Raycaster(
+            controls.getObject().position,
+            new THREE.Vector3(0, -1, 0),
+            0,
+            1.7
+        );
+        const platformHits = playerRay.intersectObjects(platforms);
+
+        if (platformHits.length > 0) {
+            velocity.y = Math.max(0, velocity.y);
+            controls.getObject().position.y = platformHits[0].point.y + 1.6;
+            canJump = true;
+        }
+
+        // Update Enemies Logic (Chasing)
+        const playerPos = controls.getObject().position;
+        enemies.forEach(e => {
+            e.mesh.lookAt(playerPos.x, e.mesh.position.y, playerPos.z);
+            e.mesh.translateZ(2.5 * delta * (1 + currentLevel * 0.1));
+
+            // Check Damage to Player
+            if (e.mesh.position.distanceTo(playerPos) < 1.5) {
+                health -= 15 * delta;
+                document.getElementById('health-fill').style.width = Math.max(0, (health / maxHealth) * 100) + '%';
+
+                if (health <= 0 && !isDead) {
+                    isDead = true;
+                    alert('CRITICAL FAILURE: Operative Defeated.');
+                    location.reload();
+                }
+            }
+        });
     }
 
     prevTime = time;
-    renderer.render( scene, camera );
+    renderer.render(scene, camera);
 }
