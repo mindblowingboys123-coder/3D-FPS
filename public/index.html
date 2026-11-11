@@ -12,23 +12,18 @@
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             display: flex; flex-direction: column; justify-content: center; 
             align-items: center; z-index: 10; 
-            background-size: cover; 
-            background-position: center; 
-        }
-        .overlay::before {
-            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 15, 0.85); z-index: -1;
+            background-size: cover; background-position: center; 
+            background-color: #0a0a0f;
         }
         .hidden { display: none !important; }
 
-        /* Verified Sci-Fi Background Images */
-        #home-menu { background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop'); }
-        #story-menu { background-image: url('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1920&auto=format&fit=crop'); }
-        #shop-menu { background-image: url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=1920&auto=format&fit=crop'); }
+        #home-menu { background-image: linear-gradient(rgba(10,10,15,0.85), rgba(10,10,15,0.85)), url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop'); }
+        #story-menu { background-image: linear-gradient(rgba(10,10,15,0.85), rgba(10,10,15,0.85)), url('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1920&auto=format&fit=crop'); }
+        #shop-menu { background-image: linear-gradient(rgba(10,10,15,0.85), rgba(10,10,15,0.85)), url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=1920&auto=format&fit=crop'); }
 
         h1 { font-size: 3rem; letter-spacing: 4px; color: #00f0ff; text-shadow: 0 0 15px rgba(0, 240, 255, 0.6); margin-bottom: 10px; text-transform: uppercase; }
         p.subtitle { color: #8a8a9b; margin-bottom: 30px; font-size: 1.1rem; }
-        .menu-box { background: rgba(20, 20, 30, 0.85); border: 1px solid #00f0ff55; padding: 30px; border-radius: 12px; max-width: 700px; text-align: center; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9); backdrop-filter: blur(8px); }
+        .menu-box { background: rgba(20, 20, 30, 0.9); border: 1px solid #00f0ff55; padding: 30px; border-radius: 12px; max-width: 700px; text-align: center; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9); backdrop-filter: blur(8px); }
         .btn-group { display: flex; gap: 15px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
         
         button { background: linear-gradient(135deg, #00f0ff 0%, #0077ff 100%); border: none; color: #000; font-weight: bold; padding: 12px 28px; font-size: 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 1px; }
@@ -65,9 +60,9 @@
             <p class="subtitle">Earth-2410 Defense Protocol</p>
             <div class="currency-display">Credits: $<span id="credits-display">0</span></div>
             <div class="btn-group">
-                <button onclick="showStoryMenu()">Story Mode</button>
-                <button onclick="startMode('endless')">Endless Mode</button>
-                <button class="secondary" onclick="openShop()">Armory & Shop</button>
+                <button id="btn-story-mode">Story Mode</button>
+                <button id="btn-endless-mode">Endless Mode</button>
+                <button id="btn-open-shop" class="secondary">Armory & Shop</button>
             </div>
         </div>
     </div>
@@ -80,8 +75,8 @@
                 In the year 2410, Deep-Space Outpost Aether went silent. An anomalous quantum void breached containment, transforming sentry automated suits into hostile rogue entities. As the last operative of the Sol Security Directorate, your objective is to breach the lower deck, eradicate void entities, and purge the orbital core.
             </p>
             <div class="btn-group">
-                <button onclick="startMode('story')">Launch Mission (Level 1)</button>
-                <button class="secondary" onclick="showHomeMenu()">Back</button>
+                <button id="btn-launch-story">Launch Mission (Level 1)</button>
+                <button id="btn-story-back" class="secondary">Back</button>
             </div>
         </div>
     </div>
@@ -97,31 +92,31 @@
                         <h4>Plasma Rifle</h4>
                         <p>High rate of fire, reliable pulse energy.</p>
                     </div>
-                    <button id="buy-rifle" onclick="buyItem('rifle', 150)">Buy ($150)</button>
+                    <button id="buy-rifle">Buy ($150)</button>
                 </div>
                 <div class="shop-item">
                     <div>
                         <h4>Heavy Sniper</h4>
                         <p>Devastating precision damage with high zoom.</p>
                     </div>
-                    <button id="buy-sniper" onclick="buyItem('sniper', 300)">Buy ($300)</button>
+                    <button id="buy-sniper">Buy ($300)</button>
                 </div>
                 <div class="shop-item">
                     <div>
                         <h4>Speed Boost</h4>
                         <p>Increases base movement and slide speed by 30%.</p>
                     </div>
-                    <button id="buy-speed" onclick="buyItem('speed', 100)">Buy ($100)</button>
+                    <button id="buy-speed">Buy ($100)</button>
                 </div>
                 <div class="shop-item">
                     <div>
                         <h4>Shield Core</h4>
                         <p>Increases maximum health to 150 HP.</p>
                     </div>
-                    <button id="buy-shield" onclick="buyItem('shield', 120)">Buy ($120)</button>
+                    <button id="buy-shield">Buy ($120)</button>
                 </div>
             </div>
-            <button class="secondary" onclick="showHomeMenu()">Back to Menu</button>
+            <button id="btn-shop-back" class="secondary">Back to Menu</button>
         </div>
     </div>
 
