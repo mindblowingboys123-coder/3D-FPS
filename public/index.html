@@ -3,23 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web 3D FPS Game</title>
+    <title>3D FPS - Story & Endless</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
-        #instructions {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: white; font-family: monospace; font-size: 20px;
-            text-align: center; cursor: pointer; background: rgba(0,0,0,0.8);
-            padding: 20px; border: 2px solid white;
-        }
+        * { box-sizing: border-box; user-select: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #050508; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #fff; }
+        
+        /* UI OVERLAYS */
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; background: rgba(10, 10, 15, 0.95); }
+        .hidden { display: none !important; }
+
+        /* MENU STYLING */
+        h1 { font-size: 3rem; letter-spacing: 4px; color: #00f0ff; text-shadow: 0 0 15px rgba(0, 240, 255, 0.6); margin-bottom: 10px; text-transform: uppercase; }
+        p.subtitle { color: #8a8a9b; margin-bottom: 30px; font-size: 1.1rem; }
+        .menu-box { background: rgba(20, 20, 30, 0.8); border: 1px solid #00f0ff33; padding: 30px; border-radius: 12px; max-width: 700px; text-align: center; box-shadow: 0 0 30px rgba(0, 0, 0, 0.8); }
+        .btn-group { display: flex; gap: 15px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+        
+        button { background: linear-gradient(135deg, #00f0ff 0%, #0077ff 100%); border: none; color: #000; font-weight: bold; padding: 12px 28px; font-size: 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 1px; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 0 20px rgba(0, 240, 255, 0.6); }
+        button.secondary { background: #222230; color: #fff; border: 1px solid #444466; }
+        button.secondary:hover { background: #333348; }
+
+        /* SHOP GRID */
+        .shop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; text-align: left; }
+        .shop-item { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; justify-content: space-between; }
+        .shop-item h4 { margin: 0 0 5px 0; color: #00f0ff; }
+        .shop-item p { margin: 0 0 10px 0; font-size: 0.85rem; color: #aaa; }
+        .currency-display { font-size: 1.2rem; color: #ffd700; margin-bottom: 15px; font-weight: bold; }
+
+        /* HUD STYLING */
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+        .hud-top { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .stat-bar-bg { width: 220px; height: 16px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; overflow: hidden; }
+        .stat-bar-fill { height: 100%; width: 100%; transition: width 0.2s ease; }
+        #health-fill { background: #ff3355; }
+        #stamina-fill { background: #00ff88; }
+        
+        .hud-stats { position: absolute; top: 20px; right: 20px; text-align: right; font-family: monospace; font-size: 1.2rem; }
+        .crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); transition: all 0.1s ease; }
+        .crosshair.scoped { width: 300px; height: 300px; border-color: #00f0ff; background: rgba(0,240,255,0.02); border-width: 1px; }
+
+        /* SCOPE OVERLAY */
+        #scope-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; background: radial-gradient(circle at center, transparent 30%, black 70%); display: none; z-index: 6; }
     </style>
 </head>
 <body>
-    <div id="instructions">
-        <h2>Click to Play FPS</h2>
-        <p>W, A, S, D to Move | MOUSE to Look | CLICK to Shoot</p>
+
+    <!-- HOME PAGE -->
+    <div id="home-menu" class="overlay">
+        <div class="menu-box">
+            <h1>PROJECT: AETHER</h1>
+            <p class="subtitle">Earth-2410 Defense Protocol</p>
+            <div class="currency-display">Credits: $<span id="credits-display">0</span></div>
+            <div class="btn-group">
+                <button onclick="showStoryMenu()">Story Mode</button>
+                <button onclick="startMode('endless')">Endless Mode</button>
+                <button class="secondary" onclick="openShop()">Armory & Shop</button>
+            </div>
+        </div>
     </div>
+
+    <!-- STORY MENU -->
+    <div id="story-menu" class="overlay hidden">
+        <div class="menu-box">
+            <h2>STORY ARCHIVE</h2>
+            <p id="story-text" style="line-height: 1.6; text-align: justify; color: #ccc; margin: 20px 0;">
+                In the year 2410, Deep-Space Outpost Aether went silent. An anomalous quantum void breached containment, transforming sentry automated suits into hostile rogue entities. As the last operative of the Sol Security Directorate, your objective is to breach the lower deck, eradicate void entities, and purge the orbital core.
+            </p>
+            <div class="btn-group">
+                <button onclick="startMode('story')">Launch Mission (Level 1)</button>
+                <button class="secondary" onclick="showHomeMenu()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SHOP MENU -->
+    <div id="shop-menu" class="overlay hidden">
+        <div class="menu-box" style="width: 600px;">
+            <h2>TACTICAL SHOP</h2>
+            <div class="currency-display">Credits: $<span id="shop-credits">0</span></div>
+            <div class="shop-grid">
+                <div class="shop-item">
+                    <div>
+                        <h4>Plasma Rifle</h4>
+                        <p>High rate of fire, reliable pulse energy.</p>
+                    </div>
+                    <button id="buy-rifle" onclick="buyItem('rifle', 150)">Buy ($150)</button>
+                </div>
+                <div class="shop-item">
+                    <div>
+                        <h4>Heavy Sniper</h4>
+                        <p>Devastating precision damage with high zoom.</p>
+                    </div>
+                    <button id="buy-sniper" onclick="buyItem('sniper', 300)">Buy ($300)</button>
+                </div>
+                <div class="shop-item">
+                    <div>
+                        <h4>Speed Boost</h4>
+                        <p>Increases base movement and slide speed by 30%.</p>
+                    </div>
+                    <button id="buy-speed" onclick="buyItem('speed', 100)">Buy ($100)</button>
+                </div>
+                <div class="shop-item">
+                    <div>
+                        <h4>Shield Core</h4>
+                        <p>Increases maximum health to 150 HP.</p>
+                    </div>
+                    <button id="buy-shield" onclick="buyItem('shield', 120)">Buy ($120)</button>
+                </div>
+            </div>
+            <button class="secondary" onclick="showHomeMenu()">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- GAME HUD -->
+    <div id="hud" class="hidden">
+        <div class="hud-top">
+            <div>HEALTH</div>
+            <div class="stat-bar-bg"><div id="health-fill" class="stat-bar-fill"></div></div>
+            <div>STAMINA (SLIDE)</div>
+            <div class="stat-bar-bg"><div id="stamina-fill" class="stat-bar-fill"></div></div>
+        </div>
+        <div class="hud-stats">
+            <div>MODE: <span id="hud-mode">STORY</span></div>
+            <div>LEVEL: <span id="hud-level">1</span></div>
+            <div>ENEMIES: <span id="hud-enemies">0</span></div>
+            <div>CREDITS: $<span id="hud-credits">0</span></div>
+        </div>
+        <div id="crosshair" class="crosshair"></div>
+    </div>
+    
+    <div id="scope-overlay"></div>
 
     <script type="importmap">
         {
